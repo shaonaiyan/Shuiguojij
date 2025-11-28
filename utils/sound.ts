@@ -4,14 +4,21 @@ let ctx: AudioContext | null = null;
 let masterGain: GainNode | null = null;
 
 const getCtx = () => {
-  if (!ctx) {
-    ctx = new AudioContextClass();
-    masterGain = ctx.createGain();
-    masterGain.gain.value = 0.4; // Master volume to prevent clipping
-    masterGain.connect(ctx.destination);
+  try {
+    if (!ctx && AudioContextClass) {
+      ctx = new AudioContextClass();
+      masterGain = ctx.createGain();
+      masterGain.gain.value = 0.4; // Master volume to prevent clipping
+      masterGain.connect(ctx.destination);
+    }
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(e => console.warn("Audio resume failed", e));
+    }
+    return ctx && masterGain ? { ctx, masterGain } : null;
+  } catch (e) {
+    console.warn("Audio Context initialization failed", e);
+    return null;
   }
-  if (ctx.state === 'suspended') ctx.resume();
-  return { ctx, masterGain: masterGain! };
 };
 
 // --- MUSICAL CONSTANTS ---
@@ -36,32 +43,38 @@ const playSynthTone = (
   startTime: number = 0,
   filterFreq: number = 2000
 ) => {
-  const { ctx, masterGain } = getCtx();
-  const now = ctx.currentTime + startTime;
+  const audio = getCtx();
+  if (!audio) return;
+  const { ctx, masterGain } = audio;
+  
+  try {
+    const now = ctx.currentTime + startTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
 
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  const filter = ctx.createBiquadFilter();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now);
 
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, now);
+    // Filter creates the "analog" feel by cutting harsh highs
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(filterFreq, now);
+    filter.Q.value = 1; // Slight resonance
 
-  // Filter creates the "analog" feel by cutting harsh highs
-  filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(filterFreq, now);
-  filter.Q.value = 1; // Slight resonance
+    // Envelope (ADSR-ish)
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(vol, now + 0.01); // Fast Attack
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration); // Decay to silence
 
-  // Envelope (ADSR-ish)
-  gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(vol, now + 0.01); // Fast Attack
-  gain.gain.exponentialRampToValueAtTime(0.001, now + duration); // Decay to silence
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
 
-  osc.connect(filter);
-  filter.connect(gain);
-  gain.connect(masterGain);
-
-  osc.start(now);
-  osc.stop(now + duration + 0.1);
+    osc.start(now);
+    osc.stop(now + duration + 0.1);
+  } catch(e) {
+    // Ignore audio errors
+  }
 };
 
 // --- GAME SOUNDS ---
@@ -90,37 +103,41 @@ export const playSpinNote = (index: number, speedRatio: number) => {
 export const playStopSound = () => {
   // A heavy, satisfying mechanical "clunk"
   // Layering a quick pitch-drop sine with a noise burst (simulated by low saw)
-  const { ctx, masterGain } = getCtx();
+  const audio = getCtx();
+  if (!audio) return;
+  const { ctx, masterGain } = audio;
   const now = ctx.currentTime;
 
-  // Layer 1: Low Thud
-  const osc1 = ctx.createOscillator();
-  const gain1 = ctx.createGain();
-  osc1.type = 'sine';
-  osc1.frequency.setValueAtTime(150, now);
-  osc1.frequency.exponentialRampToValueAtTime(40, now + 0.15);
-  gain1.gain.setValueAtTime(0.5, now);
-  gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-  osc1.connect(gain1);
-  gain1.connect(masterGain);
-  osc1.start(now);
-  osc1.stop(now + 0.2);
+  try {
+    // Layer 1: Low Thud
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(150, now);
+    osc1.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+    gain1.gain.setValueAtTime(0.5, now);
+    gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+    osc1.connect(gain1);
+    gain1.connect(masterGain);
+    osc1.start(now);
+    osc1.stop(now + 0.2);
 
-  // Layer 2: Metallic Click (High filtered saw)
-  const osc2 = ctx.createOscillator();
-  const gain2 = ctx.createGain();
-  const filter = ctx.createBiquadFilter();
-  osc2.type = 'sawtooth';
-  osc2.frequency.setValueAtTime(800, now);
-  filter.type = 'bandpass';
-  filter.frequency.value = 2000;
-  gain2.gain.setValueAtTime(0.1, now);
-  gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
-  osc2.connect(filter);
-  filter.connect(gain2);
-  gain2.connect(masterGain);
-  osc2.start(now);
-  osc2.stop(now + 0.1);
+    // Layer 2: Metallic Click (High filtered saw)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    osc2.type = 'sawtooth';
+    osc2.frequency.setValueAtTime(800, now);
+    filter.type = 'bandpass';
+    filter.frequency.value = 2000;
+    gain2.gain.setValueAtTime(0.1, now);
+    gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+    osc2.connect(filter);
+    filter.connect(gain2);
+    gain2.connect(masterGain);
+    osc2.start(now);
+    osc2.stop(now + 0.1);
+  } catch(e) {}
 };
 
 export const playBetSound = () => {
@@ -135,52 +152,57 @@ export const playCoinSound = () => {
 };
 
 export const playWinSound = (multiplier: number) => {
-  if (multiplier === 0) {
-    // JACKPOT / LUCK: A Siren sequence
-    const { ctx, masterGain } = getCtx();
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(600, now);
-    osc.frequency.linearRampToValueAtTime(1200, now + 0.4);
-    osc.frequency.linearRampToValueAtTime(600, now + 0.8);
-    osc.frequency.linearRampToValueAtTime(1200, now + 1.2);
-    gain.gain.value = 0.2;
-    gain.gain.linearRampToValueAtTime(0, now + 1.5);
-    osc.connect(gain);
-    gain.connect(masterGain);
-    osc.start(now);
-    osc.stop(now + 1.5);
-    return;
-  }
+  const audio = getCtx();
+  if (!audio) return;
+  const { ctx, masterGain } = audio;
+  const now = ctx.currentTime;
 
-  // Define a nice Major 7th Chord for wins
-  const chordRoot = 523.25; // C5
-  const majorThird = 659.25; // E5
-  const perfectFifth = 783.99; // G5
-  const majorSeventh = 987.77; // B5
+  try {
+    if (multiplier === 0) {
+      // JACKPOT / LUCK: A Siren sequence
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.linearRampToValueAtTime(1200, now + 0.4);
+      osc.frequency.linearRampToValueAtTime(600, now + 0.8);
+      osc.frequency.linearRampToValueAtTime(1200, now + 1.2);
+      gain.gain.value = 0.2;
+      gain.gain.linearRampToValueAtTime(0, now + 1.5);
+      osc.connect(gain);
+      gain.connect(masterGain);
+      osc.start(now);
+      osc.stop(now + 1.5);
+      return;
+    }
 
-  if (multiplier <= 5) {
-    // Small Win: Happy Major Triad
-    playSynthTone(chordRoot, 'triangle', 0.3, 0.2, 0);
-    playSynthTone(majorThird, 'triangle', 0.3, 0.2, 0.05);
-  } else if (multiplier <= 20) {
-    // Medium Win: Upward Arpeggio with Sawtooth (brassier)
-    [chordRoot, majorThird, perfectFifth, majorSeventh].forEach((freq, i) => {
-        playSynthTone(freq, 'sawtooth', 0.4, 0.1, i * 0.06, 1500);
-    });
-  } else {
-    // Big Win: The "Rave" Stabs
-    // Plays the chord repeatedly in a rhythmic pattern
-    const pattern = [0, 0.15, 0.3, 0.45, 0.6, 0.75]; // Rhythm
-    pattern.forEach(time => {
-       playSynthTone(chordRoot, 'sawtooth', 0.2, 0.15, time, 2000);
-       playSynthTone(perfectFifth, 'sawtooth', 0.2, 0.15, time, 2000);
-       playSynthTone(majorSeventh, 'sawtooth', 0.2, 0.15, time, 2000);
-       playSynthTone(chordRoot * 2, 'sine', 0.2, 0.1, time, 4000); // High sparkle
-    });
-  }
+    // Define a nice Major 7th Chord for wins
+    const chordRoot = 523.25; // C5
+    const majorThird = 659.25; // E5
+    const perfectFifth = 783.99; // G5
+    const majorSeventh = 987.77; // B5
+
+    if (multiplier <= 5) {
+      // Small Win: Happy Major Triad
+      playSynthTone(chordRoot, 'triangle', 0.3, 0.2, 0);
+      playSynthTone(majorThird, 'triangle', 0.3, 0.2, 0.05);
+    } else if (multiplier <= 20) {
+      // Medium Win: Upward Arpeggio with Sawtooth (brassier)
+      [chordRoot, majorThird, perfectFifth, majorSeventh].forEach((freq, i) => {
+          playSynthTone(freq, 'sawtooth', 0.4, 0.1, i * 0.06, 1500);
+      });
+    } else {
+      // Big Win: The "Rave" Stabs
+      // Plays the chord repeatedly in a rhythmic pattern
+      const pattern = [0, 0.15, 0.3, 0.45, 0.6, 0.75]; // Rhythm
+      pattern.forEach(time => {
+         playSynthTone(chordRoot, 'sawtooth', 0.2, 0.15, time, 2000);
+         playSynthTone(perfectFifth, 'sawtooth', 0.2, 0.15, time, 2000);
+         playSynthTone(majorSeventh, 'sawtooth', 0.2, 0.15, time, 2000);
+         playSynthTone(chordRoot * 2, 'sine', 0.2, 0.1, time, 4000); // High sparkle
+      });
+    }
+  } catch(e) {}
 };
 
 export const playErrorSound = () => {

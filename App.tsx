@@ -227,7 +227,7 @@ export default function App() {
 
             {/* Main Game Grid */}
             <div className={`relative bg-[#0a0a0a] p-2 md:p-3 rounded-xl border-2 border-gray-800 shadow-[inset_0_0_30px_black] mb-3 transition-colors duration-100 ${isBigWin ? 'border-red-500/50 bg-red-900/10' : ''}`}>
-                <div className="grid grid-cols-7 grid-rows-7 gap-1.5 md:gap-2 aspect-square max-h-[50vh] mx-auto">
+                <div className="grid grid-cols-7 grid-rows-[repeat(7,minmax(0,1fr))] gap-1.5 md:gap-2 aspect-square max-h-[50vh] mx-auto">
                     {/* Board Loop */}
                     {BOARD_LAYOUT.map((cell) => {
                       const isActive = activeCellId === cell.id;
@@ -263,7 +263,7 @@ export default function App() {
                                     transition-all active:scale-95 active:shadow-[inset_0_5px_15px_black]
                                     ${isSpinning 
                                         ? 'bg-red-950 text-gray-500 cursor-not-allowed border-4 border-red-900' 
-                                        : 'bg-gradient-to-br from-red-600 to-red-800 text-white hover:brightness-110 border-4 border-red-500'
+                                        : 'bg-gradient-to-br from-red-600 to-red-800 text-white hover:brightness-110 border-4 border-red-500 cursor-pointer pointer-events-auto'
                                     }
                                 `}
                             >
