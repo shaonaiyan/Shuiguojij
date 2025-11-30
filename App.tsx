@@ -4,27 +4,34 @@ import { BetState, INITIAL_BETS, SymbolType } from './types';
 import { LedDisplay } from './components/LedDisplay';
 import { GridSquare } from './components/GridSquare';
 import { Controls } from './components/Controls';
-import { playSpinNote, playWinSound, playCoinSound, playErrorSound, playStopSound, playCreditCountSound } from './utils/sound';
-import { Coins, Zap } from 'lucide-react';
+import { playSpinNote, playWinSound, playCoinSound, playErrorSound, playStopSound, playCreditCountSound, playCollectionSound, playBonusSound } from './utils/sound';
+import { Coins, Flame, Gift, Skull } from 'lucide-react';
 
 // Animation Constants
-const START_DELAY = 30; // Faster start
-const END_DELAY = 600;  // Slower end for tension
+const START_DELAY = 30; 
+const END_DELAY = 600; 
 const MIN_SPINS = 3;    
 
 export default function App() {
-  const [credits, setCredits] = useState<number>(100);
+  const [credits, setCredits] = useState<number>(1000); // Higher start credits for testing
   const [displayedWinAmount, setDisplayedWinAmount] = useState<number>(0);
   const [targetWinAmount, setTargetWinAmount] = useState<number>(0);
   const [bets, setBets] = useState<BetState>(INITIAL_BETS);
   
-  // Game State
+  // Game Logic State
   const [activeCellId, setActiveCellId] = useState<number | null>(null);
-  const [trailIndices, setTrailIndices] = useState<number[]>([]); // For the "comet" trail effect
+  const [trailIndices, setTrailIndices] = useState<number[]>([]); 
   const [isSpinning, setIsSpinning] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("INSERT COIN");
-  const [isBigWin, setIsBigWin] = useState<boolean>(false); // Triggers screen shake
+  const [isBigWin, setIsBigWin] = useState<boolean>(false);
   
+  // NEW MECHANICS STATE
+  const [rage, setRage] = useState<number>(0); // 0 to 100
+  const [freeSpins, setFreeSpins] = useState<number>(0);
+  const [collectedItems, setCollectedItems] = useState<SymbolType[]>([]);
+  const [consecutiveLosses, setConsecutiveLosses] = useState<number>(0);
+  const [totalSpins, setTotalSpins] = useState<number>(0);
+
   const timeoutRef = useRef<number | null>(null);
   const currentCellRef = useRef<number>(0);
 
@@ -32,7 +39,7 @@ export default function App() {
   useEffect(() => {
     if (displayedWinAmount < targetWinAmount) {
       const diff = targetWinAmount - displayedWinAmount;
-      const step = Math.ceil(diff / 10); // Dynamic step size for speed
+      const step = Math.ceil(diff / 10); 
       
       const timer = setTimeout(() => {
         setDisplayedWinAmount(prev => Math.min(prev + step, targetWinAmount));
@@ -40,14 +47,23 @@ export default function App() {
       }, 50);
       return () => clearTimeout(timer);
     } else if (displayedWinAmount > targetWinAmount) {
-        // Reset case
         setDisplayedWinAmount(targetWinAmount);
     }
   }, [displayedWinAmount, targetWinAmount]);
 
   const totalBet = (Object.values(bets) as number[]).reduce((a: number, b: number) => a + b, 0);
 
-  const getRandomTarget = () => {
+  // DDA (Dynamic Difficulty) & RNG
+  const getRandomTarget = useCallback(() => {
+    // DDA: Protection for consecutive losses
+    if (consecutiveLosses >= 10) {
+        // Force a Luck or Apple hit
+        return Math.random() > 0.5 ? 9 : 4; 
+    }
+    
+    // DDA: Newbie Boost (first 500 spins)
+    // We stick to the weights which are already generous for Apple (40%)
+    
     const totalWeight = Object.values(WEIGHTS).reduce((a: number, b: number) => a + b, 0);
     let random = Math.random() * totalWeight;
     for (const [id, weight] of Object.entries(WEIGHTS)) {
@@ -55,67 +71,62 @@ export default function App() {
       if (random <= 0) return parseInt(id);
     }
     return 0; 
-  };
+  }, [consecutiveLosses]);
 
   const spin = useCallback(() => {
-    if (totalBet === 0) {
-      setMessage("PLACE BET");
-      playErrorSound();
-      return;
-    }
-    if (totalBet > credits) {
-      setMessage("NO COINS");
-      playErrorSound();
-      return;
+    // Free Spin doesn't cost credits
+    if (freeSpins === 0) {
+        if (totalBet === 0) {
+            setMessage("PLACE BET");
+            playErrorSound();
+            return;
+        }
+        if (totalBet > credits) {
+            setMessage("NO COINS");
+            playErrorSound();
+            return;
+        }
+        setCredits(prev => prev - totalBet);
+    } else {
+        setFreeSpins(prev => prev - 1);
+        setMessage(`FREE SPIN (${freeSpins - 1})`);
     }
 
-    // Deduct and Reset
-    setCredits(prev => prev - totalBet);
     setTargetWinAmount(0);
     setDisplayedWinAmount(0);
     setIsSpinning(true);
     setIsBigWin(false);
-    setMessage("SPINNING...");
+    
+    if (freeSpins === 0) setMessage("SPINNING...");
 
     const targetId = getRandomTarget();
     const currentPos = currentCellRef.current;
     
-    // Ensure we spin enough times to make it exciting
     const distance = (targetId - currentPos + 24) % 24;
-    // Add randomness to total spins for variance in duration
     const extraSpins = 24 * (MIN_SPINS + Math.floor(Math.random() * 2)); 
     const totalSteps = extraSpins + distance;
     
     let currentStep = 0;
     
     const runStep = () => {
-      // Move 1 step forward
       currentCellRef.current = (currentCellRef.current + 1) % 24;
       const currentId = currentCellRef.current;
       setActiveCellId(currentId);
 
-      // Calculate Trail (last 2 positions)
-      // Only show trail if we are moving relatively fast
       const prev1 = (currentId - 1 + 24) % 24;
       const prev2 = (currentId - 2 + 24) % 24;
       setTrailIndices([prev1, prev2]);
 
       currentStep++;
 
-      // Calculate Speed/Delay
       let delay = START_DELAY;
       const stepsRemaining = totalSteps - currentStep;
-      
-      // Calculate speed ratio for sound (0 = slow, 1 = fast)
       let speedRatio = 1;
 
       if (stepsRemaining < 20) {
-         // Exponential Slowdown
-         const t = (20 - stepsRemaining) / 20; // 0 to 1
-         delay = START_DELAY + (END_DELAY - START_DELAY) * (t * t); // Quadratic ease out
+         const t = (20 - stepsRemaining) / 20; 
+         delay = START_DELAY + (END_DELAY - START_DELAY) * (t * t); 
          speedRatio = 1 - t;
-         
-         // Remove trail at very end for precision feel
          if (stepsRemaining < 5) setTrailIndices([]);
       }
 
@@ -124,46 +135,103 @@ export default function App() {
       if (currentStep < totalSteps) {
         timeoutRef.current = window.setTimeout(runStep, delay);
       } else {
-        // FINISHED
         playStopSound();
-        setTrailIndices([]); // Clear trail
+        setTrailIndices([]); 
         handleSpinEnd(targetId);
       }
     };
 
+    setTotalSpins(prev => prev + 1);
     runStep();
-  }, [bets, credits, totalBet]);
+  }, [bets, credits, totalBet, freeSpins, getRandomTarget]);
 
   const handleSpinEnd = (landedId: number) => {
     setIsSpinning(false);
     const landedCell = BOARD_LAYOUT.find(c => c.id === landedId);
-    
     if (!landedCell) return;
 
     const betOnSymbol = bets[landedCell.symbol];
     let win = 0;
-
+    const isFreeSpinActive = freeSpins > 0;
+    
+    // 1. Calculate Base Win
     if (betOnSymbol > 0 && landedCell.multiplier > 0) {
       win = betOnSymbol * landedCell.multiplier;
     } 
-    else if (landedCell.symbol === SymbolType.LUCK) {
-      // Special Luck Rules: Random Bonus
-      win = Math.max(totalBet * 10, 100); 
-      setMessage("JACKPOT!");
+    
+    // 2. Special Rules
+    if (landedCell.symbol === SymbolType.LUCK) {
+      // Send Light Logic: Randomly give 20-100 credits
+      win = 50 * (Math.floor(Math.random() * 5) + 1);
+      setMessage("LUCKY LIGHT!");
+      setConsecutiveLosses(0); // Reset bad luck
     }
 
+    // 3. Collection Mechanics (Small Fruits)
+    if (landedCell.isSmall && betOnSymbol > 0) {
+        // Add to collection
+        if (!collectedItems.includes(landedCell.symbol)) {
+            const newCollection = [...collectedItems, landedCell.symbol];
+            setCollectedItems(newCollection);
+            playCollectionSound();
+            
+            // Check for Full Collection
+            if (newCollection.length >= 5) {
+                // BONUS TRIGGER
+                setTimeout(() => {
+                    playBonusSound();
+                    setMessage("COLLECTION BONUS!");
+                    setTargetWinAmount(w => w + 500);
+                    setCredits(c => c + 500);
+                    setCollectedItems([]);
+                }, 1000);
+            }
+        }
+    }
+
+    // 4. Rage Mechanics & Free Spin Multiplier
     if (win > 0) {
-      playWinSound(landedCell.multiplier > 0 ? landedCell.multiplier : 0);
-      setTargetWinAmount(win);
-      setCredits(prev => prev + win);
-      setMessage(win > 50 ? "BIG WIN!!" : "WINNER!");
-      
-      // Trigger Big Win visual effects if multiplier is high
-      if (landedCell.multiplier >= 20 || landedCell.symbol === SymbolType.LUCK) {
-          setIsBigWin(true);
-      }
+        // Winning
+        if (isFreeSpinActive) {
+            win *= 2; // Double win in Free Spin
+            setMessage("DOUBLE WIN!");
+        }
+        setConsecutiveLosses(0);
+        
+        // Jackpot Chance on Red BAR
+        if (landedCell.symbol === SymbolType.BAR && landedCell.multiplier >= 100) {
+             if (Math.random() < 0.1) { // 10% chance for extra Jackpot if hit
+                 win += 5000;
+                 setMessage("JACKPOT!!!");
+             }
+        }
+
+        playWinSound(landedCell.multiplier);
+        setTargetWinAmount(prev => prev + win);
+        setCredits(prev => prev + win);
+        
+        if (landedCell.multiplier >= 20 || win > 500) setIsBigWin(true);
+        if (!isFreeSpinActive && win < 100) setMessage("WINNER!");
+
     } else {
-      setMessage("TRY AGAIN");
+        // Losing
+        if (!isFreeSpinActive) {
+            setConsecutiveLosses(prev => prev + 1);
+            setRage(prev => {
+                const newRage = Math.min(prev + 5, 100);
+                if (newRage === 100) {
+                    // Trigger Free Spins
+                    setTimeout(() => {
+                        playBonusSound();
+                        setFreeSpins(5);
+                        setRage(0);
+                        setMessage("LEOPARD RAGE MODE!");
+                    }, 500);
+                }
+                return newRage;
+            });
+            setMessage("TRY AGAIN");
+        }
     }
   };
 
@@ -184,7 +252,7 @@ export default function App() {
   
   const handleAddCredits = () => {
       playCoinSound();
-      setCredits(c => c + 10);
+      setCredits(c => c + 100);
       setMessage("COIN IN");
   }
 
@@ -199,24 +267,18 @@ export default function App() {
   return (
     <div className={`min-h-screen flex items-center justify-center p-2 font-sans overflow-hidden transition-transform ${isBigWin ? 'animate-shake' : ''}`}>
       
-      {/* Visual Cabinet Wrapper */}
-      <div className="relative metal-gradient p-4 md:p-6 rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(255,255,255,0.1)] border-4 border-[#222]">
+      {/* Visual Cabinet */}
+      <div className={`relative metal-gradient p-4 md:p-6 rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.8)] border-4 ${freeSpins > 0 ? 'border-red-500 shadow-[0_0_50px_red]' : 'border-[#222]'}`}>
         
-        {/* Decorative Screws */}
-        <div className="absolute top-4 left-4 w-4 h-4 rounded-full bg-gray-400 shadow-inner flex items-center justify-center"><div className="w-full h-0.5 bg-gray-600 rotate-45"></div></div>
-        <div className="absolute top-4 right-4 w-4 h-4 rounded-full bg-gray-400 shadow-inner flex items-center justify-center"><div className="w-full h-0.5 bg-gray-600 rotate-45"></div></div>
-        <div className="absolute bottom-4 left-4 w-4 h-4 rounded-full bg-gray-400 shadow-inner flex items-center justify-center"><div className="w-full h-0.5 bg-gray-600 rotate-45"></div></div>
-        <div className="absolute bottom-4 right-4 w-4 h-4 rounded-full bg-gray-400 shadow-inner flex items-center justify-center"><div className="w-full h-0.5 bg-gray-600 rotate-45"></div></div>
-
         {/* Main Interface Area */}
         <div className="bg-black rounded-[20px] p-2 md:p-4 border-[6px] border-gray-800 shadow-inner relative overflow-hidden max-w-2xl w-full mx-auto">
             
             {/* Top Display Panel */}
             <div className="glass-panel p-3 mb-3 rounded-lg border border-gray-700 flex justify-between items-center relative z-10">
                 <LedDisplay label="WIN" value={displayedWinAmount} color={displayedWinAmount > 0 ? "text-green-400" : "text-red-500"} size="md" />
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center z-10">
                     <h1 className="text-yellow-500 font-arcade text-lg md:text-3xl font-black italic tracking-widest drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]">
-                        SUPER <span className="text-red-500">FRUIT</span>
+                        LEOPARD <span className="text-red-500">RAGE</span>
                     </h1>
                     <div className={`text-blue-400 font-led text-sm ${isSpinning ? 'animate-pulse' : ''}`}>
                       {message}
@@ -226,7 +288,7 @@ export default function App() {
             </div>
 
             {/* Main Game Grid */}
-            <div className={`relative bg-[#0a0a0a] p-2 md:p-3 rounded-xl border-2 border-gray-800 shadow-[inset_0_0_30px_black] mb-3 transition-colors duration-100 ${isBigWin ? 'border-red-500/50 bg-red-900/10' : ''}`}>
+            <div className={`relative bg-[#0a0a0a] p-2 md:p-3 rounded-xl border-2 border-gray-800 shadow-[inset_0_0_30px_black] mb-3 transition-colors duration-100 ${freeSpins > 0 ? 'bg-red-900/20' : ''}`}>
                 <div className="grid grid-cols-7 grid-rows-[repeat(7,minmax(0,1fr))] gap-1.5 md:gap-2 aspect-square max-h-[50vh] mx-auto">
                     {/* Board Loop */}
                     {BOARD_LAYOUT.map((cell) => {
@@ -238,41 +300,68 @@ export default function App() {
                         key={cell.id} 
                         cell={cell} 
                         activeState={isActive ? 'active' : isTrail ? 'trail' : 'idle'}
+                        // Show collected state for small items
+                        isCollected={cell.isSmall && collectedItems.includes(cell.symbol)}
                         {...{style: getGridArea(cell.id)}}
                         />
                       );
                     })}
 
-                    {/* Center Decoration */}
-                    <div className="col-start-2 col-end-7 row-start-2 row-end-7 m-1 bg-gray-900 rounded-lg border border-gray-700 flex flex-col items-center justify-center relative overflow-hidden">
+                    {/* Center Decoration & Info */}
+                    <div className="col-start-2 col-end-7 row-start-2 row-end-7 m-1 bg-gray-900 rounded-lg border border-gray-700 flex flex-col items-center justify-between relative overflow-hidden p-4">
                         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
                         
-                        {/* Circular Start Button Area */}
-                        <div className="relative w-48 h-48 md:w-56 md:h-56 rounded-full bg-gradient-to-b from-gray-800 to-black p-2 shadow-[0_10px_20px_black] flex items-center justify-center border-4 border-gray-700">
-                             {/* Decorative ring */}
+                        {/* Rage Bar (Top) */}
+                        <div className="w-full flex items-center gap-2 mb-2 z-10">
+                            <span className="text-xs font-bold text-red-500">RAGE</span>
+                            <div className="flex-1 h-4 bg-gray-800 rounded-full overflow-hidden border border-gray-600">
+                                <div 
+                                    className={`h-full transition-all duration-300 ${freeSpins > 0 ? 'bg-red-500 animate-pulse' : 'bg-orange-600'}`}
+                                    style={{ width: `${freeSpins > 0 ? 100 : rage}%` }}
+                                ></div>
+                            </div>
+                            {freeSpins > 0 && <Flame size={16} className="text-red-500 animate-bounce" />}
+                        </div>
+
+                        {/* Start Button */}
+                        <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full bg-gradient-to-b from-gray-800 to-black p-2 shadow-[0_10px_20px_black] flex items-center justify-center border-4 border-gray-700 z-10">
                             <div className={`absolute inset-2 rounded-full border-2 border-dashed border-yellow-600/30 ${isSpinning ? 'animate-[spin_2s_linear_infinite]' : 'animate-[spin_20s_linear_infinite]'}`}></div>
-                            
                             <button 
                                 onClick={spin}
                                 disabled={isSpinning}
                                 className={`
-                                    w-32 h-32 md:w-40 md:h-40 rounded-full
+                                    w-24 h-24 md:w-32 md:h-32 rounded-full
                                     flex flex-col items-center justify-center gap-1
-                                    text-2xl font-black font-arcade tracking-wider
+                                    text-xl font-black font-arcade tracking-wider
                                     shadow-[0_5px_10px_black,inset_0_2px_5px_rgba(255,255,255,0.3)]
-                                    transition-all active:scale-95 active:shadow-[inset_0_5px_15px_black]
+                                    transition-all active:scale-95
                                     ${isSpinning 
                                         ? 'bg-red-950 text-gray-500 cursor-not-allowed border-4 border-red-900' 
-                                        : 'bg-gradient-to-br from-red-600 to-red-800 text-white hover:brightness-110 border-4 border-red-500 cursor-pointer pointer-events-auto'
+                                        : freeSpins > 0 
+                                            ? 'bg-gradient-to-br from-yellow-600 to-red-600 text-white border-4 border-yellow-400 animate-pulse'
+                                            : 'bg-gradient-to-br from-red-600 to-red-800 text-white hover:brightness-110 border-4 border-red-500'
                                     }
                                 `}
                             >
-                                <span className="drop-shadow-md">{isSpinning ? '...' : 'START'}</span>
+                                <span className="drop-shadow-md">{isSpinning ? '...' : freeSpins > 0 ? 'FREE' : 'SPIN'}</span>
                             </button>
                         </div>
 
+                        {/* Collection Tray (Bottom) */}
+                        <div className="w-full bg-black/50 rounded-lg p-2 border border-gray-800 z-10">
+                            <div className="flex justify-between items-center text-[10px] text-gray-400 mb-1">
+                                <span>FRUIT COLLECTION</span>
+                                <span>{collectedItems.length}/5</span>
+                            </div>
+                            <div className="flex justify-between gap-1">
+                                {[0,1,2,3,4].map(i => (
+                                    <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i < collectedItems.length ? 'bg-green-500 shadow-[0_0_5px_lime]' : 'bg-gray-700'}`}></div>
+                                ))}
+                            </div>
+                        </div>
+
                         {/* Bet Indicator */}
-                        <div className="absolute bottom-4 right-4 bg-black/80 px-3 py-1 rounded border border-gray-600 text-red-500 font-led">
+                        <div className="absolute bottom-4 right-4 bg-black/80 px-3 py-1 rounded border border-gray-600 text-red-500 font-led z-10">
                             BET: {totalBet}
                         </div>
                     </div>
@@ -280,13 +369,13 @@ export default function App() {
             </div>
 
             {/* Controls */}
-            <Controls bets={bets} onPlaceBet={handlePlaceBet} disabled={isSpinning} />
+            <Controls bets={bets} onPlaceBet={handlePlaceBet} disabled={isSpinning || freeSpins > 0} />
 
             {/* Bottom Utility Bar */}
             <div className="mt-3 flex justify-between items-center px-2">
                 <button 
                     onClick={handleClearBets} 
-                    disabled={isSpinning}
+                    disabled={isSpinning || freeSpins > 0}
                     className="text-gray-500 text-xs font-arcade hover:text-white transition-colors uppercase tracking-widest"
                 >
                     Reset Bets
@@ -302,11 +391,8 @@ export default function App() {
                 </button>
             </div>
             
-             {/* Scanlines Overlay */}
              <div className="scanlines pointer-events-none opacity-30"></div>
-             
-             {/* Red Flash Overlay for Big Wins */}
-             {isBigWin && <div className="absolute inset-0 bg-red-500/20 mix-blend-overlay animate-pulse pointer-events-none z-50"></div>}
+             {freeSpins > 0 && <div className="absolute inset-0 bg-red-500/10 mix-blend-overlay pointer-events-none z-0 animate-pulse"></div>}
         </div>
       </div>
     </div>

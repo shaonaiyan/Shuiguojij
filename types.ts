@@ -15,6 +15,7 @@ export interface GridCell {
   symbol: SymbolType;
   multiplier: number;
   isSmall?: boolean; // Small usually means lower payout or distinct visual
+  isSpecial?: boolean; // For Red Bar / Blue Bar distinction
 }
 
 export interface BetState {
