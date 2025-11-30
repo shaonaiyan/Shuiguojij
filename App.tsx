@@ -5,7 +5,7 @@ import { LedDisplay } from './components/LedDisplay';
 import { GridSquare } from './components/GridSquare';
 import { Controls } from './components/Controls';
 import { playSpinNote, playWinSound, playCoinSound, playErrorSound, playStopSound, playCreditCountSound, playCollectionSound, playBonusSound } from './utils/sound';
-import { Coins, Flame, Gift, Skull } from 'lucide-react';
+import { Coins, Flame, Trophy, RotateCw } from 'lucide-react';
 
 // Animation Constants
 const START_DELAY = 30; 
@@ -13,20 +13,18 @@ const END_DELAY = 600;
 const MIN_SPINS = 3;    
 
 export default function App() {
-  const [credits, setCredits] = useState<number>(1000); // Higher start credits for testing
+  const [credits, setCredits] = useState<number>(1000); 
   const [displayedWinAmount, setDisplayedWinAmount] = useState<number>(0);
   const [targetWinAmount, setTargetWinAmount] = useState<number>(0);
   const [bets, setBets] = useState<BetState>(INITIAL_BETS);
   
-  // Game Logic State
   const [activeCellId, setActiveCellId] = useState<number | null>(null);
   const [trailIndices, setTrailIndices] = useState<number[]>([]); 
   const [isSpinning, setIsSpinning] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("INSERT COIN");
   const [isBigWin, setIsBigWin] = useState<boolean>(false);
   
-  // NEW MECHANICS STATE
-  const [rage, setRage] = useState<number>(0); // 0 to 100
+  const [rage, setRage] = useState<number>(0);
   const [freeSpins, setFreeSpins] = useState<number>(0);
   const [collectedItems, setCollectedItems] = useState<SymbolType[]>([]);
   const [consecutiveLosses, setConsecutiveLosses] = useState<number>(0);
@@ -35,12 +33,10 @@ export default function App() {
   const timeoutRef = useRef<number | null>(null);
   const currentCellRef = useRef<number>(0);
 
-  // Score Ticking Effect
   useEffect(() => {
     if (displayedWinAmount < targetWinAmount) {
       const diff = targetWinAmount - displayedWinAmount;
       const step = Math.ceil(diff / 10); 
-      
       const timer = setTimeout(() => {
         setDisplayedWinAmount(prev => Math.min(prev + step, targetWinAmount));
         playCreditCountSound();
@@ -53,17 +49,10 @@ export default function App() {
 
   const totalBet = (Object.values(bets) as number[]).reduce((a: number, b: number) => a + b, 0);
 
-  // DDA (Dynamic Difficulty) & RNG
   const getRandomTarget = useCallback(() => {
-    // DDA: Protection for consecutive losses
     if (consecutiveLosses >= 10) {
-        // Force a Luck or Apple hit
         return Math.random() > 0.5 ? 9 : 4; 
     }
-    
-    // DDA: Newbie Boost (first 500 spins)
-    // We stick to the weights which are already generous for Apple (40%)
-    
     const totalWeight = Object.values(WEIGHTS).reduce((a: number, b: number) => a + b, 0);
     let random = Math.random() * totalWeight;
     for (const [id, weight] of Object.entries(WEIGHTS)) {
@@ -74,7 +63,6 @@ export default function App() {
   }, [consecutiveLosses]);
 
   const spin = useCallback(() => {
-    // Free Spin doesn't cost credits
     if (freeSpins === 0) {
         if (totalBet === 0) {
             setMessage("PLACE BET");
@@ -154,30 +142,22 @@ export default function App() {
     let win = 0;
     const isFreeSpinActive = freeSpins > 0;
     
-    // 1. Calculate Base Win
     if (betOnSymbol > 0 && landedCell.multiplier > 0) {
       win = betOnSymbol * landedCell.multiplier;
     } 
     
-    // 2. Special Rules
     if (landedCell.symbol === SymbolType.LUCK) {
-      // Send Light Logic: Randomly give 20-100 credits
       win = 50 * (Math.floor(Math.random() * 5) + 1);
       setMessage("LUCKY LIGHT!");
-      setConsecutiveLosses(0); // Reset bad luck
+      setConsecutiveLosses(0); 
     }
 
-    // 3. Collection Mechanics (Small Fruits)
     if (landedCell.isSmall && betOnSymbol > 0) {
-        // Add to collection
         if (!collectedItems.includes(landedCell.symbol)) {
             const newCollection = [...collectedItems, landedCell.symbol];
             setCollectedItems(newCollection);
             playCollectionSound();
-            
-            // Check for Full Collection
             if (newCollection.length >= 5) {
-                // BONUS TRIGGER
                 setTimeout(() => {
                     playBonusSound();
                     setMessage("COLLECTION BONUS!");
@@ -189,18 +169,15 @@ export default function App() {
         }
     }
 
-    // 4. Rage Mechanics & Free Spin Multiplier
     if (win > 0) {
-        // Winning
         if (isFreeSpinActive) {
-            win *= 2; // Double win in Free Spin
+            win *= 2; 
             setMessage("DOUBLE WIN!");
         }
         setConsecutiveLosses(0);
         
-        // Jackpot Chance on Red BAR
         if (landedCell.symbol === SymbolType.BAR && landedCell.multiplier >= 100) {
-             if (Math.random() < 0.1) { // 10% chance for extra Jackpot if hit
+             if (Math.random() < 0.1) {
                  win += 5000;
                  setMessage("JACKPOT!!!");
              }
@@ -214,13 +191,11 @@ export default function App() {
         if (!isFreeSpinActive && win < 100) setMessage("WINNER!");
 
     } else {
-        // Losing
         if (!isFreeSpinActive) {
             setConsecutiveLosses(prev => prev + 1);
             setRage(prev => {
                 const newRage = Math.min(prev + 5, 100);
                 if (newRage === 100) {
-                    // Trigger Free Spins
                     setTimeout(() => {
                         playBonusSound();
                         setFreeSpins(5);
@@ -265,32 +240,62 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen flex items-center justify-center p-2 font-sans overflow-hidden transition-transform ${isBigWin ? 'animate-shake' : ''}`}>
+    <div className={`
+      min-h-[100dvh] w-full flex items-center justify-center 
+      bg-[#050505] p-2 md:p-4 
+      overflow-hidden 
+      ${isBigWin ? 'animate-shake' : ''}
+    `}>
       
-      {/* Visual Cabinet */}
-      <div className={`relative metal-gradient p-4 md:p-6 rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.8)] border-4 ${freeSpins > 0 ? 'border-red-500 shadow-[0_0_50px_red]' : 'border-[#222]'}`}>
+      {/* Cabinet Body */}
+      <div className={`
+        relative w-full max-w-lg
+        metal-gradient 
+        rounded-2xl md:rounded-[40px] 
+        shadow-[0_0_50px_rgba(0,0,0,0.8),0_10px_20px_rgba(0,0,0,0.5)] 
+        border-[3px] md:border-4 
+        transition-colors duration-500
+        flex flex-col
+        ${freeSpins > 0 ? 'border-red-600 shadow-[0_0_30px_red]' : 'border-[#222]'}
+      `}>
         
-        {/* Main Interface Area */}
-        <div className="bg-black rounded-[20px] p-2 md:p-4 border-[6px] border-gray-800 shadow-inner relative overflow-hidden max-w-2xl w-full mx-auto">
-            
+        {/* Screw Details */}
+        <div className="absolute top-3 left-3 w-2 h-2 md:w-4 md:h-4 rounded-full bg-[#555] shadow-inner flex items-center justify-center"><div className="w-full h-[1px] bg-[#222] rotate-45"></div></div>
+        <div className="absolute top-3 right-3 w-2 h-2 md:w-4 md:h-4 rounded-full bg-[#555] shadow-inner flex items-center justify-center"><div className="w-full h-[1px] bg-[#222] rotate-45"></div></div>
+        
+        {/* Main Content Container */}
+        <div className="p-2 md:p-5 flex-1 flex flex-col gap-2 md:gap-4">
+
             {/* Top Display Panel */}
-            <div className="glass-panel p-3 mb-3 rounded-lg border border-gray-700 flex justify-between items-center relative z-10">
-                <LedDisplay label="WIN" value={displayedWinAmount} color={displayedWinAmount > 0 ? "text-green-400" : "text-red-500"} size="md" />
-                <div className="flex flex-col items-center z-10">
-                    <h1 className="text-yellow-500 font-arcade text-lg md:text-3xl font-black italic tracking-widest drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]">
-                        LEOPARD <span className="text-red-500">RAGE</span>
+            <div className="glass-panel p-2 md:p-3 rounded-lg border border-gray-700/50 flex justify-between items-center relative z-20">
+                <LedDisplay label="WIN" value={displayedWinAmount} color={displayedWinAmount > 0 ? "text-green-400" : "text-red-500"} size="sm" />
+                
+                <div className="flex flex-col items-center flex-1 px-2">
+                    <h1 className="text-yellow-500 font-arcade text-base md:text-3xl font-black italic tracking-widest drop-shadow-[0_0_5px_rgba(234,179,8,0.5)] text-center leading-tight">
+                        <span className="text-white">SUPER</span> <span className="text-red-500">FRUIT</span>
                     </h1>
-                    <div className={`text-blue-400 font-led text-sm ${isSpinning ? 'animate-pulse' : ''}`}>
+                    <div className={`
+                        text-cyan-400 font-led text-[10px] md:text-sm mt-1
+                        ${isSpinning ? 'animate-pulse' : ''}
+                    `}>
                       {message}
                     </div>
                 </div>
-                <LedDisplay label="CREDIT" value={credits} color="text-red-500" size="md" />
+                
+                <LedDisplay label="CREDITS" value={credits} color="text-red-500" size="sm" />
             </div>
 
-            {/* Main Game Grid */}
-            <div className={`relative bg-[#0a0a0a] p-2 md:p-3 rounded-xl border-2 border-gray-800 shadow-[inset_0_0_30px_black] mb-3 transition-colors duration-100 ${freeSpins > 0 ? 'bg-red-900/20' : ''}`}>
-                <div className="grid grid-cols-7 grid-rows-[repeat(7,minmax(0,1fr))] gap-1.5 md:gap-2 aspect-square max-h-[50vh] mx-auto">
-                    {/* Board Loop */}
+            {/* Game Grid Board */}
+            <div className={`
+                relative bg-[#080808] 
+                p-2 md:p-3 
+                rounded-xl md:rounded-2xl 
+                border border-gray-800 
+                shadow-[inset_0_0_20px_black] 
+                transition-colors duration-300
+                ${freeSpins > 0 ? 'bg-red-950/20 border-red-900/50' : ''}
+            `}>
+                <div className="grid grid-cols-7 grid-rows-[repeat(7,1fr)] gap-1 md:gap-2 aspect-square w-full">
                     {BOARD_LAYOUT.map((cell) => {
                       const isActive = activeCellId === cell.id;
                       const isTrail = trailIndices.includes(cell.id);
@@ -300,100 +305,129 @@ export default function App() {
                         key={cell.id} 
                         cell={cell} 
                         activeState={isActive ? 'active' : isTrail ? 'trail' : 'idle'}
-                        // Show collected state for small items
                         isCollected={cell.isSmall && collectedItems.includes(cell.symbol)}
                         {...{style: getGridArea(cell.id)}}
                         />
                       );
                     })}
 
-                    {/* Center Decoration & Info */}
-                    <div className="col-start-2 col-end-7 row-start-2 row-end-7 m-1 bg-gray-900 rounded-lg border border-gray-700 flex flex-col items-center justify-between relative overflow-hidden p-4">
+                    {/* CENTER DASHBOARD */}
+                    <div className="
+                        col-start-2 col-end-7 row-start-2 row-end-7 
+                        m-0.5 md:m-1 
+                        bg-[#111] rounded-lg border border-gray-800 
+                        flex flex-col items-center justify-between 
+                        relative overflow-hidden 
+                        p-2 md:p-4
+                    ">
                         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
                         
-                        {/* Rage Bar (Top) */}
-                        <div className="w-full flex items-center gap-2 mb-2 z-10">
-                            <span className="text-xs font-bold text-red-500">RAGE</span>
-                            <div className="flex-1 h-4 bg-gray-800 rounded-full overflow-hidden border border-gray-600">
+                        {/* Rage Meter */}
+                        <div className="w-full flex items-center gap-1.5 md:gap-2 z-10">
+                            <Flame size={12} className={`md:w-5 md:h-5 ${freeSpins > 0 ? 'text-red-500 animate-bounce' : 'text-gray-600'}`} />
+                            <div className="flex-1 h-2 md:h-3 bg-gray-900 rounded-full overflow-hidden border border-gray-700 shadow-inner">
                                 <div 
-                                    className={`h-full transition-all duration-300 ${freeSpins > 0 ? 'bg-red-500 animate-pulse' : 'bg-orange-600'}`}
+                                    className={`h-full transition-all duration-300 ${freeSpins > 0 ? 'bg-gradient-to-r from-red-600 to-yellow-500 animate-pulse' : 'bg-gradient-to-r from-orange-800 to-orange-500'}`}
                                     style={{ width: `${freeSpins > 0 ? 100 : rage}%` }}
                                 ></div>
                             </div>
-                            {freeSpins > 0 && <Flame size={16} className="text-red-500 animate-bounce" />}
+                            <span className="text-[9px] md:text-xs font-bold text-gray-400 tabular-nums">{Math.floor(rage)}%</span>
                         </div>
 
-                        {/* Start Button */}
-                        <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full bg-gradient-to-b from-gray-800 to-black p-2 shadow-[0_10px_20px_black] flex items-center justify-center border-4 border-gray-700 z-10">
-                            <div className={`absolute inset-2 rounded-full border-2 border-dashed border-yellow-600/30 ${isSpinning ? 'animate-[spin_2s_linear_infinite]' : 'animate-[spin_20s_linear_infinite]'}`}></div>
+                        {/* BIG START BUTTON */}
+                        <div className="relative z-10 flex-1 flex items-center justify-center py-2">
+                             {/* Spinning Ring */}
+                            <div className={`
+                                absolute w-32 h-32 md:w-48 md:h-48 rounded-full border border-dashed border-gray-700/50
+                                ${isSpinning ? 'animate-[spin_1s_linear_infinite] border-yellow-600/50' : 'animate-[spin_10s_linear_infinite]'}
+                            `}></div>
+
                             <button 
                                 onClick={spin}
                                 disabled={isSpinning}
                                 className={`
-                                    w-24 h-24 md:w-32 md:h-32 rounded-full
-                                    flex flex-col items-center justify-center gap-1
-                                    text-xl font-black font-arcade tracking-wider
-                                    shadow-[0_5px_10px_black,inset_0_2px_5px_rgba(255,255,255,0.3)]
-                                    transition-all active:scale-95
+                                    w-24 h-24 md:w-36 md:h-36 rounded-full
+                                    flex flex-col items-center justify-center gap-0.5 md:gap-1
+                                    text-lg md:text-2xl font-black font-arcade tracking-widest
+                                    shadow-[0_8px_15px_rgba(0,0,0,0.6),inset_0_2px_5px_rgba(255,255,255,0.2)]
+                                    transition-all active:scale-95 active:shadow-[inset_0_5px_15px_black]
+                                    border-[4px] md:border-[6px]
+                                    group
                                     ${isSpinning 
-                                        ? 'bg-red-950 text-gray-500 cursor-not-allowed border-4 border-red-900' 
+                                        ? 'bg-[#1a1a1a] text-gray-600 border-[#333]' 
                                         : freeSpins > 0 
-                                            ? 'bg-gradient-to-br from-yellow-600 to-red-600 text-white border-4 border-yellow-400 animate-pulse'
-                                            : 'bg-gradient-to-br from-red-600 to-red-800 text-white hover:brightness-110 border-4 border-red-500'
+                                            ? 'bg-gradient-to-br from-yellow-500 to-red-600 text-white border-yellow-400 shadow-[0_0_30px_rgba(255,0,0,0.4)] animate-pulse'
+                                            : 'bg-gradient-to-br from-[#c00] to-[#800] text-white border-[#f00] hover:brightness-110'
                                     }
                                 `}
                             >
-                                <span className="drop-shadow-md">{isSpinning ? '...' : freeSpins > 0 ? 'FREE' : 'SPIN'}</span>
+                                <span className="drop-shadow-md z-10">
+                                    {isSpinning ? '...' : freeSpins > 0 ? 'FREE' : 'SPIN'}
+                                </span>
+                                {!isSpinning && <RotateCw size={16} className="text-white/30 md:w-6 md:h-6 group-hover:rotate-180 transition-transform duration-500" />}
                             </button>
                         </div>
 
-                        {/* Collection Tray (Bottom) */}
-                        <div className="w-full bg-black/50 rounded-lg p-2 border border-gray-800 z-10">
-                            <div className="flex justify-between items-center text-[10px] text-gray-400 mb-1">
-                                <span>FRUIT COLLECTION</span>
-                                <span>{collectedItems.length}/5</span>
+                        {/* Collection Tray */}
+                        <div className="w-full bg-[#080808] rounded p-1.5 md:p-2 border border-gray-800 z-10 shadow-inner">
+                            <div className="flex justify-between items-center text-[8px] md:text-[10px] text-gray-500 mb-1">
+                                <span className="flex items-center gap-1"><Trophy size={8} /> COLLECTION</span>
+                                <span className={collectedItems.length >= 4 ? 'text-yellow-500 animate-pulse' : ''}>{collectedItems.length}/5</span>
                             </div>
-                            <div className="flex justify-between gap-1">
+                            <div className="flex justify-between gap-0.5 md:gap-1 h-1.5 md:h-2">
                                 {[0,1,2,3,4].map(i => (
-                                    <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i < collectedItems.length ? 'bg-green-500 shadow-[0_0_5px_lime]' : 'bg-gray-700'}`}></div>
+                                    <div key={i} className={`flex-1 rounded-sm transition-all duration-300 ${i < collectedItems.length ? 'bg-gradient-to-r from-green-400 to-green-600 shadow-[0_0_5px_lime]' : 'bg-[#222]'}`}></div>
                                 ))}
                             </div>
                         </div>
-
-                        {/* Bet Indicator */}
-                        <div className="absolute bottom-4 right-4 bg-black/80 px-3 py-1 rounded border border-gray-600 text-red-500 font-led z-10">
+                        
+                        {/* Current Bet Tag */}
+                         <div className="absolute top-2 right-2 md:top-4 md:right-4 bg-black/60 backdrop-blur px-2 py-0.5 rounded border border-gray-700 text-red-500 font-led text-[10px] md:text-xs z-10">
                             BET: {totalBet}
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Controls */}
+            {/* Controls Section */}
             <Controls bets={bets} onPlaceBet={handlePlaceBet} disabled={isSpinning || freeSpins > 0} />
 
-            {/* Bottom Utility Bar */}
-            <div className="mt-3 flex justify-between items-center px-2">
+            {/* Bottom Actions */}
+            <div className="flex justify-between items-center gap-2 pt-1">
                 <button 
                     onClick={handleClearBets} 
                     disabled={isSpinning || freeSpins > 0}
-                    className="text-gray-500 text-xs font-arcade hover:text-white transition-colors uppercase tracking-widest"
+                    className="
+                        px-3 py-2 rounded text-[10px] md:text-xs font-arcade 
+                        text-gray-500 bg-[#111] border border-gray-800 
+                        active:bg-gray-800 hover:text-white transition-colors
+                    "
                 >
-                    Reset Bets
+                    RESET BETS
                 </button>
                 
                 <button 
                     onClick={handleAddCredits}
-                    className="group flex items-center gap-2 bg-yellow-600 px-4 py-2 rounded-full font-bold text-black shadow-lg hover:bg-yellow-500 active:translate-y-1 transition-all"
+                    className="
+                        flex-1 flex items-center justify-center gap-2 
+                        bg-gradient-to-r from-yellow-700 to-yellow-600 
+                        py-2 rounded-lg 
+                        font-bold text-black shadow-lg 
+                        active:scale-95 transition-transform
+                        border-t border-yellow-500
+                    "
                 >
-                    <div className="w-1 h-6 bg-black/20 rounded-full"></div> {/* Coin slot visual */}
-                    <span className="font-arcade text-sm">INSERT COIN</span>
-                    <Coins size={16} className="group-hover:rotate-12 transition-transform" />
+                    <div className="w-1 h-4 md:h-5 bg-black/30 rounded-full"></div>
+                    <span className="font-arcade text-xs md:text-sm drop-shadow-sm text-yellow-100">INSERT COIN</span>
+                    <Coins size={14} className="text-yellow-100" />
                 </button>
             </div>
             
-             <div className="scanlines pointer-events-none opacity-30"></div>
-             {freeSpins > 0 && <div className="absolute inset-0 bg-red-500/10 mix-blend-overlay pointer-events-none z-0 animate-pulse"></div>}
         </div>
+        
+        {/* Overlay Effects */}
+        <div className="scanlines pointer-events-none opacity-20"></div>
+        {freeSpins > 0 && <div className="absolute inset-0 bg-red-500/5 mix-blend-overlay pointer-events-none z-0 animate-pulse rounded-[inherit]"></div>}
       </div>
     </div>
   );

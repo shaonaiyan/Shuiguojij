@@ -10,7 +10,6 @@ interface ControlsProps {
 }
 
 export const Controls: React.FC<ControlsProps> = ({ bets, onPlaceBet, disabled }) => {
-  // Classic layout order
   const buttonOrder = [
     SymbolType.BAR,
     SymbolType.SEVEN,
@@ -23,23 +22,36 @@ export const Controls: React.FC<ControlsProps> = ({ bets, onPlaceBet, disabled }
   ];
 
   return (
-    <div className="grid grid-cols-4 md:grid-cols-8 gap-3 p-4 bg-gradient-to-b from-gray-800 to-black rounded-b-xl shadow-inner border-t-2 border-gray-600">
+    <div className="
+        grid grid-cols-4 md:grid-cols-8 gap-2 md:gap-4 
+        p-3 md:p-5 
+        bg-[#111] 
+        rounded-b-2xl md:rounded-b-[24px] 
+        border-t border-gray-800
+        relative
+    ">
+      {/* Panel Texture */}
+      <div className="absolute inset-0 rounded-b-2xl bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')] opacity-50 pointer-events-none"></div>
+
       {buttonOrder.map((symbol) => {
         const config = SYMBOL_CONFIG[symbol];
         const currentBet = bets[symbol];
         const hasBet = currentBet > 0;
 
         return (
-          <div key={symbol} className="flex flex-col items-center gap-1">
-            {/* Bet Digital Readout */}
+          <div key={symbol} className="flex flex-col items-center gap-1 md:gap-2 relative z-10">
+            {/* Digital Bet Counter */}
             <div className={`
-                w-full text-center font-led text-sm md:text-lg h-6 flex items-center justify-center rounded border border-gray-700 shadow-[inset_0_2px_4px_rgba(0,0,0,0.8)]
-                ${hasBet ? 'bg-black text-red-500 shadow-[0_0_5px_rgba(239,68,68,0.4)]' : 'bg-black/50 text-red-900'}
+                w-full text-center font-led text-xs md:text-base h-5 md:h-7 
+                flex items-center justify-center rounded 
+                border border-gray-800 shadow-[inset_0_2px_4px_black]
+                transition-colors duration-200
+                ${hasBet ? 'bg-black text-red-500 shadow-[0_0_4px_rgba(239,68,68,0.3)]' : 'bg-[#050505] text-red-900/50'}
             `}>
               {hasBet ? currentBet : '0'}
             </div>
             
-            {/* Physical Button */}
+            {/* Physical Arcade Button */}
             <button
               onClick={() => {
                 if (!disabled) {
@@ -50,32 +62,44 @@ export const Controls: React.FC<ControlsProps> = ({ bets, onPlaceBet, disabled }
                 }
               }}
               className={`
-                group relative w-full aspect-[1/1] md:aspect-[3/4]
+                group relative w-full aspect-square md:aspect-[4/5]
                 flex flex-col items-center justify-center
-                rounded-lg border-b-4 border-r-4
-                transition-all duration-75 active:border-b-0 active:border-r-0 active:translate-y-1 active:translate-x-1
+                rounded-lg md:rounded-xl 
+                transition-all duration-75 
+                active:scale-95 active:shadow-none
                 ${disabled 
-                    ? 'bg-gray-700 border-gray-900 opacity-60 cursor-not-allowed' 
-                    : 'bg-gradient-to-br from-white/90 to-gray-200 border-gray-400 hover:brightness-110 cursor-pointer shadow-[0_5px_15px_rgba(0,0,0,0.5)]'
+                    ? 'opacity-50 cursor-not-allowed grayscale' 
+                    : 'cursor-pointer hover:brightness-110 active:brightness-90'
                 }
               `}
             >
-              {/* Button Top Gloss */}
-              <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/80 to-transparent rounded-t-lg opacity-50 pointer-events-none" />
-              
-              <div className={`${config.color} scale-75 md:scale-100 drop-shadow-sm`}>
-                {config.icon}
-              </div>
-              
-              {/* LED light inside button (turns on when bet placed) */}
-              <div className={`
-                 absolute bottom-2 w-8 h-1 rounded-full blur-[2px] transition-opacity
-                 ${hasBet ? 'bg-yellow-400 opacity-100' : 'bg-transparent opacity-0'}
-              `}></div>
+                {/* Button Base (Depth) */}
+                <div className="absolute inset-0 bg-[#0a0a0a] rounded-lg md:rounded-xl translate-y-1 shadow-lg"></div>
+                
+                {/* Button Top */}
+                <div className={`
+                    absolute inset-0 bg-gradient-to-b from-[#e5e5e5] to-[#999] 
+                    rounded-lg md:rounded-xl 
+                    shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_2px_rgba(0,0,0,0.5)]
+                    border-b border-[#666]
+                    flex flex-col items-center justify-center
+                `}>
+                    {/* Icon */}
+                    <div className={`${config.color} scale-75 md:scale-110 drop-shadow-sm`}>
+                        {config.icon}
+                    </div>
+                </div>
+
+                {/* Indicator Light */}
+                <div className={`
+                    absolute top-1 right-1 w-1.5 h-1.5 md:w-2 md:h-2 rounded-full 
+                    shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)] border border-gray-400
+                    ${hasBet ? 'bg-yellow-400 shadow-[0_0_4px_yellow]' : 'bg-gray-600'}
+                `}></div>
             </button>
             
-            {/* Label below button */}
-            <span className="text-[9px] md:text-[10px] text-gray-400 font-bold tracking-widest uppercase font-arcade mt-1">
+            {/* Label */}
+            <span className="text-[8px] md:text-[10px] text-gray-500 font-bold tracking-wider uppercase font-arcade">
                 {config.label}
             </span>
           </div>
